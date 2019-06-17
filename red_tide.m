@@ -105,8 +105,7 @@
 %
 %
 
-function [X_Coef,F,X_Coef_Unc,X_modeled,varargout] = ...
-    red_tide(X,T,varargin)
+function [X_Coef,F,X_Coef_Unc,X_modeled,varargout] = red_tide(X,T,varargin)
 % red_tide(X,T,Spec,n_lowNO,df_NO,n_lowO,tide_f,sideband_centers,n_sidebands,df_sidebands,inertial)
 % OR
 % red_tide(X,T,{Spec,F,H,R})
