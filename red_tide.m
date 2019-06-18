@@ -110,6 +110,13 @@ function [X_Coef,F,X_Coef_Unc,X_modeled,varargout] = red_tide(X,T,varargin)
 % OR
 % red_tide(X,T,{Spec,F,H,R})
 
+if nargin == 0
+    disp('[X_Coef,F,X_Coef_Unc,X_modeled,     H,m,R,P] = ')
+    disp('red_tide(X,T,Spec,n_lowNO,df_NO,n_lowO,tide_f,sideband_centers,n_sidebands,df_sidebands,inertial)')
+    disp('OR')
+    disp('red_tide(X,T,{Spec,F,H,     R})')
+else
+
 % Demean the data (and detrend if necessary):
 X_nonan = X(isfinite(X));
 T_nonan = T(isfinite(X));
@@ -562,4 +569,5 @@ elseif nargout == 8
 else
 end
 
+end
 end
