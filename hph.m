@@ -10,7 +10,6 @@
 % OUT:  C = Nx1, the first column of H*P*H'
 % 
 function C = hph(H,P)
-N = size(H,1);
 HH = H.*H(1,:);
 C = HH*diag(P);
 end
