@@ -72,6 +72,8 @@ if iscell(tide_f)
                 F_user_defined_tide = [F_user_defined_tide, tide_f{i}];
             end
         end
+    end
+    for i = 1:length(sideband_centers)
         for k = 1:length(F_cusp_boolean)
             if isempty(sideband_centers)
                 F_user_defined_center = [];
