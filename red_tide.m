@@ -1,573 +1,530 @@
-% [X_Coef,F,X_Coef_Unc,X_modeled,H,m,R,P] =
-% red_tide(X,T,Spec,n_lowNO,df_NO,n_lowO,tide_f,sideband_centers,n_sidebands,df_sidebands,inertial)
-% OR
-% red_tide(X,T,{Spec,F,H,R})
+% [F, Coef, Coef_Unc, Amp, y_modeled, H, x, R, P] = red_tide(t, y, FSR_cell, 'var1', val1, etc.)
 % 
-% NOTE: H,m,R,P are optional outputs
-%
-% Use "USER-FRIENDLY VERSION" if you want a single or a few time series
-% analyzed, without needing to know a ton about what goes on under the
-% hood. Many inputs, lots of automation.
-% Use the "PRO VERSION" if you are analyzing many time series in the same
-% way, and/or if you want to directly control what goes on under the hood.
-% Few inputs, lots of direct control.
-%
+% Input for red_tide can get complicated and requires some level of prior
+% knowledge or guesswork concerning the statistics and physics of the time
+% series to be analyzed. Tidal coefficients must be chosen manually, even
+% ubiquitous tides like M2, unless a preset is used. The signal-to-noise
+% ratio assumed by red_tide may vary with frequency and is determined by
+% the prior (assumed) autocovariances of both the model coefficients and
+% the residual time series.
+% 
+% The equation to be solved is:         y = H*x + r
+% Prior model autocovariance is:        P = <xx'>
+% Prior residual autocovariance is:     R = <rr'>
+% "x" is estimated by "~x":            ~x = (H' R^-1 H + P^-1)^-1 H' R^-1 y
+% 
+% N = number of data, M = number of frequencies
+% 
+% % % % % % % % % % % % % % % % % INPUTS  % % % % % % % % % % % % % % % % %
+% 
+% t             Nx1 vector, times corresponding to data in "y". This must
+%               be in units of hours.
+% 
+% y             Nx1 vector, time series from which tidal information is to
+%               be calculated
+% 
+% FSR_cell      Cell, may be either empty {} or contain three sub-cells
+%               {F_cell,S_cell,R_cell}:
+% 
+%                   F_cell contains frequency information to build "F",
+%                   "H", and "P"
+%                   S_cell contains spectral information to build "P"
+%                   R_cell contains information to build "R"
+% 
+%               Any of these except F_cell may be left empty, in which case
+%               "R" and/or "P" are white noise (or are given directly, see
+%               below). These are best defined in advance, as they can be
+%               long and cumbersome.
+% 
+%               F_cell = {Preset}   (see end of documentation)
+%                     OR {n_lowNO, df_NO, n_lowO, tide_f, fband_centers, n_sidebands, df_sidebands, inertial}
+%               where     n_lowNO = number of non-orthogonally spaced
+%                                   (low) frequencies, starting at df_NO
+%                         df_NO   = arbitrary spacing of low non-orthogonal
+%                                   frequencies
+%                         n_lowO  = number of orthogonally-spaced (df) low
+%                                   frequencies, starting just above the
+%                                   highest of the non-orthogonal low
+%                                   frequencies (or at df if n_lowNO = 0)
+%                         tide_f  = cell with all the tidal frequencies to
+%                                   be fit, formatted as characters (e.g.
+%                                   'S2') or numerically (e.g. 1/12) or a
+%                                   mixture, order is unimportant.
+%                         fband_centers = cell, the centers of frequency
+%                                   bands, may be the same as "tide_f"
+%                         n_sidebands = cell (same size as "fband_centers")
+%                                   with the number of frequencies away
+%                                   from the corresponding center to be fit
+%                         df_sidebands = scalar, the spacing of frequencies
+%                                   in the bands centered around the
+%                                   frequencies in "fband_centers"
+%                         inertial = (Optional) three-element vector:
+%                                   [lat, df, N] where lat = latitude in
+%                                   degrees, df = frequency step for the
+%                                   near-inertial band (lowest frequency
+%                                   being f_coriolis), and N = the number
+%                                   of frequencies to be modeled in the
+%                                   near-inerial band.
+% 
+%               S_cell = {f_spec, spec}
+%               where     f_spec  = frequency vector corresponding to "spec"
+%                         spec    = spectrum to be used as the model prior,
+%                                   where sum(spec) = variance, not
+%                                   spectral power
+% 
+%               R_cell = {R_input, R_format, Cov_cutoff, Window}
+%               where     R_input = scalar, pair, or vector:
+%                                   if scalar: 0 < R_input < 1 is fraction
+%                                   of variance in residual prior, with
+%                                   white noise assumed
+%                                   if pair: R_input = [slope,frac], where
+%                                   slope <= 0 is the spectral slope of the
+%                                   spectral distribution assumed for R
+%                                   if vector: covariance or spectrum
+%                                   corresponding to R
+%                         R_format = character, one of 'c' (for
+%                                   [auto]covariance) or 's' (for
+%                                   'spectrum'), which tells which form
+%                                   "R_input" takes. Choice only matters
+%                                   for vector "R_input".
+%                         Cov_cutoff = cutoff time lag beyond which zero
+%                                   covariance is assumed for R.
+%                         Window  = character (e.g. 'triang') for window
+%                                   function used to spectrally smooth the
+%                                   autocovariance to enable inversion of
+%                                   R. Default is 'hanning'.
+% 
+% Variable/value pairs may be used after "FSR_cell" to insert 'F', 'H',
+% 'P', and/or 'R' if they are already constructed. This option is available
+% for extra control over what red_tide uses, as well as for computational
+% efficiency when running multiple time series through red_tide using the
+% same prior assumptions and modeling at the same frequencies, otherwise
+% these matrices would need to be recalculated each time.
+% Additionally, the option 'Fig' may be set to 'on' in order to produce
+% a cursory figure that includes time- and frequency-domain information
+% about the input and output, including: data (time series), model time
+% series, data periodogram, model prior spectrum, residual prior spectrum,
+% and model amplitude.
+% 
+% 
+% % % % % % % % % % % % % % % % % OUTPUTS % % % % % % % % % % % % % % % % %
+% 
+% F             Mx1 vector of frequencies to which the time series is fit.
+%               This will has units of cycles per hour.
+% 
+% Coef          Mx2 matrix of model coefficients, first column are sine
+%               coefficients, second column are cosine coefficients. This
+%               is the sine/cosine sorted version of "x", an optional
+%               output (see below).
+% 
+% Coef_Unc      Mx2 matrix of the uncertainty of the model coefficients.
+%               Formally, this is the sine/cosine sorted version of
+%               "model spread about mean" <(x - ~x)(x - ~x)'>, but only the
+%               diagonal elements (off-diagonal covariance is assumed to be
+%               negligible).
+% 
+% Amp           (Optional) Mx1 vector of tidal amplitudes =
+%               0.5*(Coef(:,1).^2 + Coef(:,2).^2)
+% 
+% y_modeled     (Optional) Nx1 modeled time series, = H*x
+% 
+% H             (Optional) Nx2M regressor matrix, columns are alternating
+%               sines and cosine of frequencies contained in "F". This and
+%               the optional outputs "R" and "P" may be reused in
+%               additional applications of red_tide to prevent needless
+%               recalculation.
+% 
+% x             (Optional) 2Mx1 model coefficients in a form that can
+%               multiply by "H" to give "y_modeled"
+% 
+% R             (Optional) NxN prior error (residual) covariance matrix
+%               (time domain)
+% 
+% P             (Optional) 2Mx2M prior model covariance matrix (frequency
+%               domain)
+% 
 % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
-%
-%                 NECESSARY INPUTS
 % 
-% IN:   X = Time series (column vector, length N)
-% IN:   T = Corresponding time in hours (column vector, length N)
-%           This should be evenly spaced (if inclusing NaN) if "Spec" is a
-%           scalar. If "Spec" is the 2-column matrix as given, then you
-%           have great freedom in the kind of time series/time bases you
-%           can analyze.
+% Presets for "F_cell" may be any number from 1 to 37. There are 37 tidal
+% constutents
 % 
-%                 USER-FRIENDLY VERSION INPUTS (AFTER X & T)
-% 
-% IN:   Spec = Either a scalar or two-column matrix (size = N_spec by 2):
-%           if scalar: This is the maximum number of time steps long we
-%                      want our WKT power spectrum to look. If this option
-%                      is used, then T must be evenly spaced.
-%           if matrix: The first column is the f_spec corresponding to the
-%                      power spectrum given in the second column
-%           if cell:   First element must be the [f_spec, spec] like above,
-%                      while the second cell element is R_frac, the
-%                      residual variance fraction (see the "PRO" version
-%                      inputs below).
-% IN:   df_NO = The frequency step of the low non-orthogonal frequencies,
-%               e.g. 1/(8760) 1/hr for df = 1/(1 non-leap yr).
-% IN:   n_lowNO = The number of low non-orthogonal frequiencies modeled
-% IN:   n_lowO = The number of low orthogonal frequiencies modeled, all of
-%                which are higher than any low non-orthogonal frequencies.
-%                Note that for this range, df = 1/(T_last - T_first)
-% IN:   tide_f = Cell array of tide constituent characters formatted as
-%                follows: {"S1","S2","M2",...}. Available pre-definied
-%                frequencies are:
-%                If you want to specify one not listed, simply write it as
-%                a number instead of a string, with units 1/hr,
-%                e.g. {"M2", 1/(8)} for only the M2 and third duirnal
-%                harmonic (not a realistic choice for tide_f, but a good
-%                example).
-% IN:   sideband_centers = The tidal frequencies about which you wish to
-%                          make sidebands, e.g. {"M2", 1/8}. Note that the
-%                          contents of this cell must be a subset of tide_f
-% IN:   n_sidebands = cell array (size = size(sideband_centers)) of
-%                     whole numbers, denoting how many frequencies to look
-%                     at on either side of a peak. Coordinate in array
-%                     corresponds to the coordinate in "sideband_centers".
-% IN:   df_sidebands = the frequency step of the sidebands frequencies
-%                      about tidal peaks
-% IN:   inertial = Either 0 if we don't want any inertial frequencies
-%                  modeled, or a three-element vector if we do:
-%                  [lat, df, N] where lat = latitude in degrees,
-%                  df = frequency step for the near-inertial band (lowest
-%                  frequency being f_cor), and N = the number of
-%                  frequencies desired to be modeled in the NI band
-% 
-%                 PRO VERSION INPUT (AFTER X & T)
-% 
-% IN:   PRO = {Spec,F,H,R_frac}
-%            Spec   = Same format as in the user-friendly version.
-%            F      = Model frequencies prescribed by user (may be
-%                     arbitrary, even greater than the Nyquist frequency if
-%                     desired.
-%            H      = OPTIONAL Model matrix (regression matrix), whose
-%                     columns are sines/cosines at frequencies in F. These
-%                     must correspond with those in F. This optional input
-%                     is intended for repetitive cases where generating H
-%                     every time from the same F would be wasteful for
-%                     memory and/or CPU.
-%            R_frac = OPTIONAL Residual variance fraction, i.e. prescribe
-%                     this parameter instead of automatically calculate
-%                     from the spectrum of X given as the prior (in
-%                     "Spec"). NOTE: This overrules the optional "R" given
-%                     explicitly in "Spec" if that is provided.
-%
 % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
-%
-% OUT:  X_Coef = Matrix (M by 2) of the odd (sine, 1st column) and even
-%                (cosine, 2nd column) coefficients
-% OUT:  F = Vector (M by 1) of the frequencies corresponding to the
-%           coefficients in X_Coef
-% OUT:  X_Unc =  Matrix (M by 2) of the corresponding uncertainty (std) in
-%                X_Coef
-% OUT:  X_modeled = modeled X (i.e. only at frequencies in X)
 % 
-% OPTIONAL:
-% OUT:  H = Large matrix (N by 2M) by which X_Coef (rearranged slightly)
-%           can be multiplied to get X_modeled. ONLY DECLARE THIS OPTIONAL
-%           OUTPUT IF YOU REALLY NEED THIS MATRIX, IT CAN BE BIG.
-% OUT:  m = Same information as in X_Coef, but in the format where you
-%           could calculate X_modeled = H*m as necessary.
-% OUT:  R = Residual energy
-% OUT:  P = Prior as used when solving the inverse problem
-%
-%
+% [F, Coef, Coef_Unc, Amp, y_modeled, H, x, R, P] = red_tide(t, y, FSR_Cell, 'var1', val1, etc.)
+%                                                                     |
+%    _________________________________________________________________|
+%   |
+%   v
+% FSR_Cell = {{n_lowNO, df_NO, n_lowO, tide_f, fband_centers, n_sidebands, df_sidebands, inertial},...
+%             {f_spec, spec},...
+%             {R_input, R_format, Cov_cutoff, Window}}
+% 
+% % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
 
-function [X_Coef,F,X_Coef_Unc,X_modeled,varargout] = red_tide(X,T,varargin)
-% red_tide(X,T,Spec,n_lowNO,df_NO,n_lowO,tide_f,sideband_centers,n_sidebands,df_sidebands,inertial)
-% OR
-% red_tide(X,T,{Spec,F,H,R})
+function [F, Coef, Coef_Unc, varargout] = red_tide(t, y, FSR_cell, varargin)
 
 if nargin == 0
-    disp('[X_Coef,F,X_Coef_Unc,X_modeled,     H,m,R,P] = ')
-    disp('red_tide(X,T,Spec,n_lowNO,df_NO,n_lowO,tide_f,sideband_centers,n_sidebands,df_sidebands,inertial)')
-    disp('OR')
-    disp('red_tide(X,T,{Spec,F,H,     R})')
+    disp('[F, Coef, Coef_Unc, Amp, y_modeled, H, x, R, P] = ')
+    disp('red_tide(t, y, FSR_Cell, ''var1'', val1, etc.)')
 else
 
-% Demean the data (and detrend if necessary):
-X_nonan = X(isfinite(X));
-T_nonan = T(isfinite(X));
-H_detrend = [ones(length(T),1),T];
-H_detrend_nonan = [ones(length(T_nonan),1),T_nonan];
-m_detrend = H_detrend_nonan\X_nonan;
-% X_detrend = X - H_detrend*m_detrend; % uncomment if this is necessary
-% X = X_detrend; % uncomment if this is necessary
-nanmeanX = nanmean(X);
-X = X - nanmeanX;
-% X_nonan = X(isfinite(X)); % uncomment if this is necessary
-% % The line near the end where "X_modeled" is defined should also be
-% % uncommented if this is necessary.
 
-df = 1/(T(end) - T(1));
-f_Ny = 1/(2*mean(diff(T)));
-% ^ "T" will be evenly-spaced if the user follows the directions in the documentation
+% Option to detrend (1 = yes, 0 = no, only de-mean). Because detrending
+% will usually be advantageous (removing broadband contamination by a
+% trend), this value is adjustable only here and not as an option. Note
+% that the output "y_modeled" has the trend added back in so that
+% y_modeled ~= H*x in general.
+detrendBoolean = 0;
 
-% Predefined tidal frequencies, for convenience:
-f_m2 = 1/12.4206012;
-f_s2 = 1/12;
-f_n2 = 1/12.65834751;
-f_k1 = 1/23.93447213;
-f_o1 = 1/25.81933871;
-f_s1 = 1/24;
-f_oo1 = 1/22.30608083;
-f_m4 = 1/6.210300601;
-f_m6 = 1/4.140200401;
-f_mk3 = 1/8.177140247;
-f_s4 = 1/6;
-f_mn4 = 1/6.269173724;
-f_s6 = 1/4;
-f_Mm = 1/661.3111655;
+if (iscell(FSR_cell) && isempty(FSR_cell)) || (iscell(FSR_cell) && (length(FSR_cell) == 3))
+else
+    error(['The third argument must be a {cell}, which may be empty or',...
+           ' have three elements, each of which are a cell (see',...
+           ' documentation for accepted formats).']);
+end
 
-if nargin == 11 % no H_in or F_in or F_full
-    % Build F (and then H)
-    Spec = varargin{1};
-    n_lowNO = varargin{2};
-    df_NO = varargin{3};
-    n_lowO = varargin{4};
-    tide_f = varargin{5};
-    sideband_centers = varargin{6};
-    n_sidebands = varargin{7};
-    df_sidebands = varargin{8};
-    inertial = varargin{9};
+% Assign variables from the contents of these cells:
+if isempty(FSR_cell)
+    % Rely on varargin to build F, H, P, and R
+else % i.e. FSR_cell = {{...},{...},{...}}
+    F_cell = FSR_cell{1};
+    S_cell = FSR_cell{2};
+    R_cell = FSR_cell{3};
+    % Any of the above may be empty, in which case the relevant variable
+    % will have to be given after FSR_Cell to avoid an error.
     
-    if size(n_sidebands) ~= size(sideband_centers)
-        error('size(n_sidebands) must == size(sideband_centers)')
-    else
-    end
+    F_vars = {'n_lowNO', 'df_NO', 'n_lowO', 'tide_f', 'fband_centers', 'n_sidebands', 'df_sidebands', 'inertial'};
+    S_vars = {'f_spec', 'spec'};
+    R_vars = {'R_input', 'R_format', 'Cov_cutoff', 'Window'};
+    % ^ "Window" is not a required input like all the others
     
-    Tide_Cell = {'M2','S2','N2','K1','O1','S1','OO1','M4','M6','MK3','S4',...
-        'MN4','S6','Mm'};
-    Full_Tide_Vec = [f_m2,f_s2,f_n2,f_k1,f_o1,f_s1,f_oo1,f_m4,f_m6,f_mk3,f_s4,f_mn4,f_s6,f_Mm];
-    
-    F_user_defined_tide = [];
-    F_user_defined_center = [];
-    if iscell(tide_f)
-        F_tidal_boolean = zeros(size(Tide_Cell));
-        F_cusp_boolean = zeros(size(Tide_Cell));
-        for i = 1:length(tide_f)
-            for j = 1:length(F_tidal_boolean)
-                if ischar(tide_f{i})
-                    F_tidal_boolean(j) = strcmp(Tide_Cell{j},tide_f{i}) + F_tidal_boolean(j);
-                else
-                    F_user_defined_tide = [F_user_defined_tide, tide_f{i}];
-                end
-            end
-            for k = 1:length(F_cusp_boolean)
-                if isempty(sideband_centers)
-                    F_user_defined_center = [];
-                elseif ischar(sideband_centers{i})
-                    F_cusp_boolean(k) = strcmp(Tide_Cell{k},sideband_centers{i}) + F_cusp_boolean(k);
-                else
-                    F_user_defined_center = [F_user_defined_center, sideband_centers{i}];
-                end
-            end
+    if length(F_cell) > 1 % if length(F_cell) == 1, then preset frequencies will be used
+        for i=1:length(F_cell)
+            eval([F_vars{i},' = F_cell{i};'])
         end
-        F_tidal = Full_Tide_Vec(logical(F_tidal_boolean));
-            F_tidal = [F_tidal, F_user_defined_tide];
-            F_tidal = unique(F_tidal);
-        F_cuspcenters = Full_Tide_Vec(logical(F_cusp_boolean));
-            F_cuspcenters = [F_cuspcenters, F_user_defined_center];
-            F_cuspcenters = unique(F_cuspcenters);
-    else
-        F_tidal = [];
-        F_cuspcenters = [];
-    end
-    
-    % Build the lowfrequency non-orthogonal and orthogonal bands:
-    F_lowNO = df_NO:df_NO:(n_lowNO*df_NO);
-
-    if n_lowNO == 0
-        F_lowO = df:df:(n_lowO*df);
-    else
-        F_lowO = (F_lowNO(end) + df):df:(F_lowNO(end) + n_lowO*df);
-    end
-    
-    % Build the sideband cusps
-    F_cusps = [];
-    for i = 1:length(F_cuspcenters)
-        F_cusps = [F_cusps,...
-            (F_cuspcenters(i) - n_sidebands{i}*df_sidebands):df_sidebands:(F_cuspcenters(i) - df_sidebands),...
-            (F_cuspcenters(i) + df_sidebands):df_sidebands:(F_cuspcenters(i) + n_sidebands{i}*df_sidebands)];
-    end
-    
-    if length(inertial) == 1
-        F_inertial = []; % i.e. no inertial modeling
-    elseif length(inertial) == 3
-        % [lat, df, N]
-        Om = 1/(23.9344699);
-        f_cor = 2*Om*sind(inertial(1));
-        df_inertial = inertial(2);
-        F_inertial = f_cor:df_inertial:(inertial(3)*df_inertial);
-    else
-        error('The input variable "inertial" is formatted incorrectly.')
-    end
-    
-    F = [F_lowNO, F_lowO, F_inertial, F_cusps, F_tidal];
-
-    F = unique(F); % Removes duplicate frequencies which appear when
-    % building the cusps about tidal frequencies, and also
-    % sorts the vector of frequencies, just in case anything
-    % is out of order (it doesn't actually matter, but it
-    % does make life easier).
-    
-    diff_F = diff(F);
-    F_unmodeled = []; % will necessarily change size in the loop
-    for i=1:length(diff_F)
-        if diff_F(i) > 2*df
-            F_unmodeled = [F_unmodeled, (F(i) + df):df:(F(i+1) - df)];
-        end
-        % ^ A bit crude, but it works in one line.
-    end
-    
-    F_full = [F, F_unmodeled, (F(end) + df):df:f_Ny]; % all frequencies
-    F_full = unique(F_full); % sort and eliminate duplicates
-    F_full = F_full'; % Make it into a column vector.
-    F = F'; % Make it into a column vector.
-    
-    if sum(diff_F < 0.99*df_NO) % make sure that there are no carelessly close frequencies
-        warning(['Somewhere in your F vector, you have a frequency',...
-            ' difference less than the lowest you prescribed in',...
-            ' df_NO. This could lead to very high uncertainty',...
-            ' at this and nearby frequencies.'])
     else
     end
-    if sum(diff(F_full) < 0.99*df_NO) % make sure that there are no carelessly close frequencies
-        warning(['Somewhere in your F_full vector, you have a frequency',...
-            ' difference less than the lowest you prescribed in',...
-            ' df_NO. This could lead to very high uncertainty',...
-            ' at this and nearby frequencies.'])
-    else
+    for i=1:length(S_cell)
+        eval([S_vars{i},' = S_cell{i};'])
     end
-    
-    % Make H from F:
-    H = zeros(length(X),2*length(F));
-    for i=1:length(F)
-%         H(:,2*i - 1) = sin(2*pi*24*F(i)*T_nonan); % I like sine (an odd function ) having an odd  index
-%         H(:,2*i) =     cos(2*pi*24*F(i)*T_nonan); % and  cosine (an even function) having an even index
-        % Consider implementing H_ for getting the full X_modeled, even at
-        % times when there's no data, or simply define H as the whole thing
-        % and then the appropriate subset thereof for fitting
-        H(:,2*i - 1) = sin(2*pi*F(i)*T); % I like sine (an odd function ) having an odd  index
-        H(:,2*i) =     cos(2*pi*F(i)*T); % and  cosine (an even function) having an even index
-    end
-    
-elseif nargin == 3
-    if length(varargin{1}) == 3 || length(varargin{1}) == 4
-        Spec = varargin{1}{1}; % = [f_spec, spec] or scalar (see documentation)
-        F = unique(varargin{1}{2});
-        H = varargin{1}{3};
-        % R determined later.
-    elseif length(varargin{1}) == 2
-        Spec = varargin{1}{1}; % = [f_spec, spec] or scalar (see documentation)
-        F = unique(varargin{1}{2});
-        H = [];
-        % R determined later.
-    else
-        error('Not enough input information given.')
-    end
-    F_ = F;
-    if F_(1) > df; F_ = [df;F_]; else; end
-    if F_(end) < f_Ny; F_ = [F_;0.5]; else; end
-    diff_F = diff(F_);
-    F_unmodeled = []; % will necessarily change size in the loop
-    for i=1:length(diff_F)
-        if diff_F(i) > 2*df
-            F_unmodeled = [F_unmodeled, (F_(i) + df):df:(F_(i+1) - df)];
-        end
-    end
-    F_full = [F; F_unmodeled'];
-    F_full = unique(F_full);
-else
-    error('Wrong number of input arguments. See documentation.')
-end
-
-if size(H) == [length(X),2*length(F)]
-else
-    H = zeros(length(X),2*length(F));
-    for i=1:length(F)
-        H(:,2*i - 1) = sin(2*pi*F(i)*T); % I like sine (an odd function ) having an odd  index
-        H(:,2*i) =     cos(2*pi*F(i)*T); % and  cosine (an even function) having an even index
+    for i=1:length(R_cell)
+        eval([R_vars{i},' = R_cell{i};'])
     end
 end
+% Note: dynamically assigning variables like above is generally bad
+% practice; however, in this case the variables are constrained to the few
+% named in "F_vars", "S_vars", and "R_vars", so there's no chance of this
+% spiraling out of control.
 
-% Make spectrum, or use the one given if one is given:
-N_x = length(X);
-if length(Spec) == 1 && ~iscell(Spec) % scalar (max time lag, so that the spectrum need to be calculated here)
-    autocov_x = zeros(1 + Spec,1); % the autocovariance
-    autocov_std_x = zeros(1 + Spec,1); % the std of the points that went into each element in pre-shaped "autocov_x" (starting with zero-lag)
-    n_autocov_x = zeros(1 + Spec,2); % how many pairs were finite and how many pairs could have been finite if perfect
-    for i=1:(1 + Spec) % lag = (i-1)*dt
-        autocov_x_i = zeros(N_x - i + 1,1);
-        for j=1:(N_x - i + 1)
-            autocov_x_i(j) = X(j)*X(j+i-1);
-        end
-        autocov_x(i) = nanmean(autocov_x_i); % autocov
-        autocov_std_x(i) = nanstd(autocov_x_i); % std of points that made each element of autocov
-        n_autocov_x(i,1) = sum(isfinite(autocov_x_i)); % how many pairs were finite
-        n_autocov_x(i,2) = N_x - i + 1; % how many pairs could have been finite if perfect
-    end
-    % NOTE: "autocov_std_x" and "n_autocov_x" may be unused, and are
-    % retained here for troubleshooting and possible future inclusion.
-    autocov_x = [autocov_x;flip(autocov_x(2:(end-1)))]; % autocov_x = [autocov_x;0;flip(autocov_x(2:end))];
-    Window = fftshift(hanning(length(autocov_x),'periodic'));
-    spec = fft(autocov_x.*Window); % Window applied for smoothing
-    spec = spec/length(spec); % Satisfy Parseval's Theorem
-    if var(real(spec)) < 10000*var(imag(spec)) % make sure that the autocovariance is periodic and thus that its fft is real
-        warning(['Imaginary part [removed] of fft(autocov_x) was ',num2str(var(imag(spec))/var(real(spec)))],' times that of the real part.')
-    end
-    spec = real(spec);
-    if sum(spec < 0) % if the WKT spectrum is negative at any frequency
-        warning(['The internally calculated spectrum (using the WKT) results',...
-            ' in a partly negative spectrum. Please estimate the',...
-            ' spectrum separately and use the vector option for "Spec".']);
-        error('See warning.') % Comment this line if you really want to
-                              % use this (nothing good will likely come of
-                              % it though).
-    else
-    end
-    % Fold the spectrum in on itself due to symmetry:
-    if mod(length(spec),2) % odd length
-        spec = spec(1:ceil(length(spec)/2));%%%
-    elseif ~mod(length(spec),2) % even length
-        spec = spec(1:ceil(length(spec)/2 + 0.5));%%%
-    end
-    f_Ny = 1/(2*mean(diff(T))); % "T" will be evenly-spaced if the user follows the directions in the documentation
-    df_cov = f_Ny/length(spec);
-    f_spec = [df_cov:df_cov:f_Ny]';
-    spec(2:end) = 2*spec(2:end);
-elseif size(Spec,2) == 2 && size(Spec,1) > 1 % (Spectrum and frequencies are given)
-    f_spec = Spec(:,1);
-    spec = Spec(:,2);
-elseif length(Spec) == 1 && iscell(Spec) % same as above, this just adds more formatting options
-    f_spec = Spec{1}(:,1);
-    spec = Spec{1}(:,2);
-elseif length(Spec) == 2 && iscell(Spec) && size(Spec{1},2) == 2 % (Spectrum and frequencies are given and the noise fraction is user-defined)
-    f_spec = Spec{1}(:,1);
-    spec = Spec{1}(:,2);
-    R_user_defined = Spec{2};
-else
-    error('The 3rd input variable "Spec" is not formatted correctly. Please see the documentation.')
-end
-
-f_Ny = 1/(2*mean(diff(T))); % redone in case it's not defined (previously it only appears in an if-statements)
-df = 1/(T(end) - T(1)); % Same as above
-Sxx_Prior = interp1([f_spec;(f_Ny+df)],[spec;spec(end)],F_full,'linear');
-
-% ^ Still not done: there will be NaN's in the frequencies of F outside of
-% the min and max of f_vec. Make it the same as the lowest-frequency value
-% of "Sxx_avg".
-
-if isfinite(spec(1)) % make sure that you aren't replacing NaN with NaN
-else
-    disp(spec(1))
-    error('Your averaged spectral estimates begin with a non-finite value, which absolutely should not be the case.')
-end
-
-
-Sxx_Prior(isnan(Sxx_Prior)) = spec(1);
-% STILL not done: this Priors will need to be scaled so that they sum to
-% the average variance of the power series (unlike the Fourier spectra,
-% these autocovariance spectra are not automatically scaled by the
-% frequency resolution, i.e. they will have a different scale depending on
-% the size of max_lags, unlike Fourier spectra which are always at the same
-% scale, regardless of segment count).
-
-diffF_full = diff(F_full); % Probably better
-    diffF_full = [diffF_full(1); diffF_full];
-Sxx_Prior = Sxx_Prior.*(diffF_full./mean(diff(f_spec)));
-
-% % Define the Prior covariance matrix
-% We are assuming an extreme form of localization (otherwise a non-diagonal
-% P would imply spurious off-diagonal correlation). The spectrum is already
-% squared, so we don't have to worry about it; we just need to insert it in
-% the diagonal. We only use the part of Sxx_Prior at the frequencies we are
-% going to model (so really, THIS is now our true prior):
-
-Sxx_ModelPrior = Sxx_Prior(ismember(F_full,F));
-
-P_diag = zeros(2*length(Sxx_ModelPrior),1);
-P_diag(1:2:(2*length(Sxx_ModelPrior))) = Sxx_ModelPrior;
-P_diag(2:2:(2*length(Sxx_ModelPrior))) = Sxx_ModelPrior;
-
-P = spdiags(P_diag,0,length(P_diag),length(P_diag));
-
-% ^ P is the prior model covariance matrix. I think that the scaling is
-% right, given this example:
-% 
-% x(t) = 5*sin(om*t) - 3*cos(om*t)
-% <x^2> = 17
-% autocovariance spectrum should sum to 17 then (0 everywhere except at
-%       f = om/(2*pi), i.e. Sxx = [0 ... 17 ... 0]')
-% true model is m = [0 0 ... 5 -3 ... 0 0]'
-% diagonal of m*m' is [0 0 ... 25 9 ... 0 0]'
-% Mod square of the sin and cos components (Xs and Xc) are:
-%       Xs.^2 + Xc.^2 = [0...5...0]'.^2 + [0...3...0]'.^2 = [0...34...0]'
-% This is the same as if Xs = Xc = \pm[0...sqrt(17)...0]', which is we need to
-%       assume for a prior (that is, Xs.^2 = Xc.^2 because we have no
-%       additiobnal information from Sxx).
-% We only need Xs.^2 & Xc.^2, both of which we will have to assume for
-%       simplicity are [0 ... 17 ... 0]'
-% Thus P = a diagonal matrix with a diagonal of [0 0 ... 17 17 ... 0 0]'
-% I think this is correct, I'll have to check this more rigorously.
-
-% From Zaron (2017) JGR "MAPPING THE NONSTATIONARY INTERNAL TIDE":
-% 
-% "Note that the size metrics used here are computed from SSH variance, and
-% the variance is equal to one-half the squared amplitude of a harmonic
-% constant."
-
-% % Obtain the data error covariance matrix
-% Partition {the variance in Sxx* at F} versus {the variance in
-% Sxx* NOT at F}. The second of these will be the data error
-% covariance matrix's diagonal (R). Just calculate the second (We don't
-% need the first, because it's in P).
-% NOTE: R (data error covariance matrix) would be a constant diagonal whose
-% value is estimated by integrating the spectral estimate except
-% for the frequencies we intend to fit. Basically, get all the variance we
-% don't expect to fit, based on our prior, and use that for R; the
-% remaining variance should go into our fitted amplitudes.
-
-R = sum(Sxx_Prior(~ismember(F_full,F))); % residual variance of X
-
-% User-defined R:
-if iscell(Spec) && length(Spec) == 2
-    R = R_user_defined*sum(Sxx_Prior);
-    P = P.*(sum(Sxx_Prior)./sum(Sxx_ModelPrior)).*(1 - R_user_defined);
-    skip_adjustment = 1;
-else
-    skip_adjustment = 0;
-end
-% Overrule above if "R" is included in the PRO input format
-if nargin == 3 && length(varargin{1}) == 4
-    %   This wastes a little computation, but only the trivial amount for
-    %   defining R before:
-    R = varargin{1}{4}*sum(Sxx_Prior);
-    P = P.*(sum(Sxx_Prior)./sum(Sxx_ModelPrior)).*(1 - varargin{1}{4});
-    skip_adjustment = 1; % Unecessary, but included for clarity.
-else
-    % Adjust R to a value that is reasonable, if it was not user-defined:
-    if skip_adjustment
-    else
-        if R/sum(Sxx_Prior) > 0.9
-            warning(['The residual was estiated to be ',num2str(R*100/sum(Sxx_Prior)),...
-                '% of the total variance expected.',...
-                ' Adjusted down to ',num2str(0.9*100),...
-                ' * total variance (even now the model still has limited predictive power).'])
-            R = 0.9*sum(Sxx_Prior);
-        elseif R <= 0
-            R = 0.05*sum(Sxx_Prior);
-            warning(['The residual was estiated to be 0, which leads to a singularity. Adjusted up to ',...
-                num2str(R),' * total variance.'])
+if ~isempty(varargin)
+    % Turn option/value pairs into a structure:
+    Str = struct(varargin{:});
+    Names = fieldnames(Str);
+    % Verify that variables are only the ones that are allowed:
+    AllowedVars = {'F','H','P','R','Fig'}';
+    for i=1:length(Names)
+        if ismember(Names{i},AllowedVars)
         else
+            error(['''',Names{i},''' is not a possible option for red_tide. Please see documentation.'])
+        end
+    end
+    % If that test is passed, reassign to variables without the structure
+    % prefix (this should not affect memory in MATLAB because assigning two
+    % variables to the same array does not copy the array until one of them is
+    % changed). Nevertheless, clear "Str" after.
+    for i=1:length(Names)
+        eval([Names{i},' = Str.',Names{i},';'])
+    end
+    % Note: dynamically assigning variables like above is generally bad
+    % practice; however, in this case the variables are constrained to the few
+    % named in "AllowedVars", so there's no chance of this spiraling out of
+    % control.
+    
+else
+end
+
+clear Str
+
+%% Tidal Presets
+
+% The ordering of the tides is based on NOAA's harmonic constituent order,
+% e.g. at:
+% <https://tidesandcurrents.noaa.gov/stations.html?type=Harmonic+Constituents>
+% or any other site (though the amplitudes vary geographically, NOAA
+% maintains a 37-element list of constituents in descending order of
+% expected prominence. The order (first column of "NOAA_HARM_CONST") may be
+% modified below, but this is only recommended for special cases, otherwise
+% individual tidal constituents should be specified directly in "tide_f",
+% an argument in "F_cell", which is in turn an argument in "FSR_cell".
+
+NOAA_HARM_CONST = [...
+    1       1/(360/28.9841042)  ;...M2
+    2       1/(360/30)          ;...S2
+    3       1/(360/28.4397295)  ;...N2
+    4       1/(360/15.0410686)  ;...K1
+    5       1/(360/57.9682084)  ;...M4
+    6       1/(360/13.9430356)  ;...O1
+    7       1/(360/86.9523127)  ;...M6
+    8       1/(360/44.0251729)  ;...MK3
+    9       1/(360/60        )  ;...S4
+    10      1/(360/57.4238337)  ;...MN4
+    11      1/(360/28.5125831)  ;...NU2
+    12      1/(360/90        )  ;...S6
+    13      1/(360/27.9682084)  ;...MU2
+    14      1/(360/27.8953548)  ;...2N2
+    15      1/(360/16.1391017)  ;...OO1
+    16      1/(360/29.4556253)  ;...LAM2
+    17      1/(360/15)          ;...S1
+    18      1/(360/14.4920521)  ;...M1
+    19      1/(360/15.5854433)  ;...J1
+    20      1/(360/0.5443747)   ;...MM
+    21      1/(360/0.0821373)   ;...SSA
+    22      1/(360/0.0410686)   ;...SA
+    23      1/(360/1.0158958)   ;...MSF
+    24      1/(360/1.0980331)   ;...MF
+    25      1/(360/13.4715145)  ;...RHO
+    26      1/(360/13.3986609)  ;...Q1
+    27      1/(360/29.9589333)  ;...T2
+    28      1/(360/30.0410667)  ;...R2
+    29      1/(360/12.8542862)  ;...2Q1
+    30      1/(360/14.9589314)  ;...P1
+    31      1/(360/31.0158958)  ;...2SM2
+    32      1/(360/43.4761563)  ;...M3
+    33      1/(360/29.5284789)  ;...L2
+    34      1/(360/42.9271398)  ;...2MK3
+    35      1/(360/30.0821373)  ;...K2
+    36      1/(360/115.9364169) ;...M8
+    37      1/(360/58.9841042) ];%..MS4
+    %   order   1/(period in hr)
+
+if ~exist('F','var') && exist('F_cell','var')
+    if length(F_cell) == 1
+        for i=1:F_cell{1}
+            F(i) = NOAA_HARM_CONST(NOAA_HARM_CONST(:,1)==i, 2);
+        end
+        F = sort(F)';
+    else
+    end
+else
+end
+
+%% Demean and detrend the data:
+
+y_in = y;
+y_nonan = y(isfinite(y));
+t_nonan = t(isfinite(y));
+if detrendBoolean
+    H_detrend = [ones(length(t),1),t];
+    H_detrend_nonan = [ones(length(t_nonan),1),t_nonan];
+    x_detrend = H_detrend_nonan\y_nonan;
+    y_trend = H_detrend*x_detrend;
+    y = y - y_trend;
+else
+    y_trend = nanmean(y)*ones(size(y));
+    y = y - y_trend;
+end
+
+SamplePeriod = median(diff(t_nonan)); % "mean(diff(T));" may be better.
+% This choice was made to account for, say, instruments sampling only every
+% other observation time while also preventing a few large gaps from making
+% "SamplePeriod" too large.
+Leng = (t_nonan(end) - t_nonan(1)); % In case T(1:...) and/or T(...:end) are nan
+df = 1/Leng;
+f_Ny = 1/SamplePeriod;
+
+%% Sort out the flexible input for building R
+
+if exist('R_input','var') && length(R_input) == 1  % i.e. R_input = [residual variance fraction], white noise assumption
+    if R_input >= 0 && R_input <=1
+        R_input = [R_input*nanvar(y); zeros(Cov_cutoff,1)];
+        R_format = 'c'; % i.e. choice is an illusion in this case
+    else
+        error('"R_input" is formatted incorrectly.')
+    end
+elseif exist('R_input','var') && length(R_input) == 2
+%     'R_input', 'R_format', 'Cov_cutoff'
+    if R_input(1) < 0 % i.e. R_input = [negative spectral slope, residual variance fraction]
+        f_R = df:df:f_Ny;
+        S_R = f_R.^R_input(1);
+        S_R = S_R * R_input(2)*nanvar(y)/sum(S_R);
+        R_input = S_R;
+        R_format = 's'; % i.e. choice is an illusion in this case
+    else
+        error('"R_input" is formatted incorrectly.')
+    end
+elseif exist('R_input','var') && isvector(R_input)
+else
+    error('"R_input" is formatted incorrectly.')
+end
+
+%% Check for prior existence of F, H, R, and P
+
+if exist('F','var') % "F" is already defined
+else
+    if exist('inertial','var')
+    else
+        inertial = [];
+    end
+    F = F_make(df, n_lowNO, df_NO, n_lowO, tide_f, fband_centers, n_sidebands, df_sidebands, inertial);
+end
+
+if exist('P','var') % "P" is already defined
+elseif isempty(S_cell)
+    % P = P_make([df,f_Ny]',nanvar(y)*[0.5 0.5]',F,SamplePeriod,Leng);
+    f_spec = [df:df:f_Ny]'; spec = nanvar(y)*ones(size(f_spec))/length(f_spec);
+    P = P_make(f_spec,spec,F,SamplePeriod,Leng);
+    % i.e. same model covariance at all frequencies
+else
+    P = P_make(f_spec,spec,F,SamplePeriod,Leng);
+    % i.e. model covariance is interpolated from the given spectrum "spec"
+end
+
+if exist('H','var') % "H" is already defined
+else
+    H = H_make(t_nonan,F);
+end
+
+if exist('R','var') % "R" is already defined
+elseif isempty(R_cell)
+    R_white_frac = 0.1; % i.e. fraction of data variance expected to not be modeled at fitted frequencies
+    [R,f_R,spec_R] = R_make([R_white_frac*nanvar(y); zeros(10,1)], length(y_nonan), 'c', 5, 'rectwin');
+else
+    if exist('Window','var')
+    else
+        Window = 'hanning';
+    end
+    % ^ "Window" is not a required input like all the others
+    [R,f_R,spec_R] = R_make(R_input, length(t), R_format, Cov_cutoff, Window); % R_format = 'c' or 's'
+    % Omit columns corresponding to gaps:
+    R = R(isfinite(y),isfinite(y));
+end
+
+if exist('Fig','var') % "Fig" is already defined
+else
+    Fig = 'off';
+end
+
+%% Least Squares Problem
+
+% This chain of try-catch's serves to whiten R by adding to the diagonal
+% (zero-lag) of R when doing the Cholesky factorization until no more error
+% is given by ichol (ichol only works for positive definite matrices, and
+% the particular structure of R can make this condition difficult to
+% achieve, especially for a noise spectrum with spectral slope <= -2).
+% 
+% To avoid unnecessary computation when running many time series through
+% red_tide but reusing the same "R", make sure that "R" is positive
+% definite.
+OPTS.diagcomp = 0;
+try L = ichol(R,OPTS); catch;
+    warning(['"R" is not positive definite. If this calculation is to',...
+    ' be repeated many times for the same "R", consider first',...
+    ' verifying that "R" is positive definite to avoid unnecessary',...
+    ' computation. Whiten "R" by increasing the diagonal with the',...
+    ' option "diagcomp" (see MATLAB''s ichol for more info).'])
+    OPTS.diagcomp = 0.01;
+    disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
+    try L = ichol(R,OPTS); catch;
+        OPTS.diagcomp = 0.1;
+        disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
+        try L = ichol(R,OPTS); catch;
+            OPTS.diagcomp = 1;
+            disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
+            try L = ichol(R,OPTS); catch;
+                OPTS.diagcomp = 10;
+                disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
+                try L = ichol(R,OPTS); catch;
+                    OPTS.diagcomp = 20;
+                    disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
+                    try L = ichol(R,OPTS); catch;
+                        error('ichol option "diagcomp" was not enough to get L from R.')
+                    end
+                end
+            end
         end
     end
 end
-% % % Uncomment to see what the noise-to-signal ratio is under the hood
-% % % (should be approximately R/nanvar(X)).
-% disp(['The residual prior after adjustment is ',num2str(R*100/sum(Sxx_Prior)),'% of the total variance']);
-% disp(['The residual prior after adjustment is ',num2str( 100 * R/(R + sum(sum(P))/2) ),'% of the total variance']);
 
-%% The fitting procedure
+yw = L\y(isfinite(y));
+Hw = L\H(isfinite(y),:);
+HHPinv = Hw'*Hw + inv(P);
+x = (HHPinv\Hw')*yw;
+HRHPinvinv = inv(HHPinv);
 
-% % Perform the fit: (Wunsch 3.6.20)
-    HRHPinv = (H(isfinite(X),:)'/R)*H(isfinite(X),:) + inv(P); % Puritan: H'*inv(R)*H + inv(P)
-    m = (HRHPinv\H(isfinite(X),:)')*(R\X(isfinite(X))); % 
-% % If you didn't define "H" for all times:
-%     HRHPinv = (H'/R)*H + inv(P); % Puritan: H'*inv(R)*H + inv(P)
-%     m = (HRHPinv\H')*(R\X_nonan);
-HRHPinvinv = inv(HRHPinv);
-
-% I originally used "HRHPinv\H'*inv(R)*TS", where "HRHPinv = H'*R*H + inv(P);",
-% but I need to explicitly invert H'*R*H + inv(P) for the error estimate on
-% the coeficients later, so I might as well do it now. Note: I tested "\"
-% versus "inv" for simple inversion and inv was faster (note that below I'm
-% using a randn matrix, whereas we will end up inverting a symmetrical one,
-% so I don't know how that will matter if at all):
-% 
-%     A = randn(2000);
-%     tic
-%     Ai1 = A\speye(2000);
-%     toc
-%     tic
-%     Ai2 = inv(A);
-%     toc
-%         Elapsed time is 0.435341 seconds.
-%         Elapsed time is 0.340039 seconds.
-% 
-% 
-% The puritan way would be: m = inv(H'*inv(R)*H + inv(P))*H'*inv(R)*TS;
-% I tested the "Puritan" way, and it differs from the fast way by only a
-% factor of 10^-13 or less (i.e. difference over either), so you can
-% definitely get away with the fast way.
-% 
-% Maybe a more efficient way would be: (HRHPinv\H')*(R\TS)
-
-m = m*(length(F)/(length(F) - 1))^0;
+x = x*(length(F)/(length(F) - 1));
 % ^ Observed to be a necessary correction
+Coef = nan(length(F),2);
+Coef(:,1) = x(1:2:end); % sine coefficients
+Coef(:,2) = x(2:2:end); % cosine coefficients
 
-X_Coef = nan(length(F),2);
-X_Coef(:,1) = m(1:2:end); % sine coefficients
-X_Coef(:,2) = m(2:2:end); % cosine coefficients
-
-m_uncertainty = sqrt(diag(HRHPinvinv));
-X_Coef_Unc = nan(length(F),2);
-X_Coef_Unc(:,1) = m_uncertainty(1:2:end); % sine coefficients uncertainty
-X_Coef_Unc(:,2) = m_uncertainty(2:2:end); % cosine coefficients uncertainty
+x_uncertainty = sqrt(diag(HRHPinvinv));
+Coef_Unc = nan(length(F),2);
+Coef_Unc(:,1) = x_uncertainty(1:2:end); % sine coefficients uncertainty
+Coef_Unc(:,2) = x_uncertainty(2:2:end); % cosine coefficients uncertainty
 
 
-X_modeled = H*m;% + H_detrend*m_detrend;
+y_modeled = H*x + y_trend;
                 % ^ Reintroduce trend-line
+Amp = 0.5*(Coef(:,1).^2 + Coef(:,2).^2);
 
-if nargout == 4
+if strcmp(Fig,'on')
+    y_0padded = y;
+    y_0padded(~isfinite(y)) = nanmean(y);
+    Periodogram_y = fft(y_0padded)/length(y);
+    f_periodogram = [(0):(1/length(y)):(1 - 1/length(y))]';
+    
+    figure('Color',[1 1 1])
+    subplot(2,1,1)
+    plot(t,y_in-nanmean(y_in),'.-k'); hold on
+    plot(t_nonan,y_modeled-nanmean(y_in),'.-r')
+    plot(t,y_in-y_modeled,'b.-')
+    legend('Data - mean','Fit - mean','Residual'); xlabel('Time'); ylabel('Data'); title(['Data variance = ',num2str(nanvar(y))])
+    subplot(2,1,2)
+    loglog(24*f_periodogram(2:end),2*abs(Periodogram_y(2:end)).^2,'color',[0.5 0.5 0.5]); hold on
+    loglog(24*f_spec,spec,'g.-')
+    loglog(24*f_R,spec_R,'b.-')
+    loglog(24*F,Amp,'r.-')
+    legend(['|FFT(Data)|^2, \Sigma = ',num2str(sum(abs(Periodogram_y(2:end)).^2))],...
+           ['Given spectral prior, \Sigma = ',num2str(sum(spec))],...
+           ['Residual prior, \Sigma = ',num2str(sum(spec_R))],...
+           ['Model coefficients squared, \Sigma = ',num2str(sum(0.5*(Coef(:,1).^2 + Coef(:,2).^2)))])
+    xlabel('Frequency (cpd)'); ylabel('Variance')
+    set(gcf,'Position',[440   127   560   671])
+else
+end
+
+% varargout = {Amp,y_modeled,H,x,R,P}
+if nargout == 3
+elseif nargout == 4
+    varargout{1} = Amp;
 elseif nargout == 5
-    varargout{1} = H;
+    varargout{1} = Amp;
+    varargout{2} = y_modeled;
 elseif nargout == 6
-    varargout{1} = H;
-    varargout{2} = m;
+    varargout{1} = Amp;
+    varargout{2} = y_modeled;
+    varargout{3} = H;
 elseif nargout == 7
-    varargout{1} = H;
-    varargout{2} = m;
-    varargout{3} = R;
+    varargout{1} = Amp;
+    varargout{2} = y_modeled;
+    varargout{3} = H;
+    varargout{4} = x;
 elseif nargout == 8
-    varargout{1} = H;
-    varargout{2} = m;
-    varargout{3} = R;
-    varargout{4} = P;
+    varargout{1} = Amp;
+    varargout{2} = y_modeled;
+    varargout{3} = H;
+    varargout{4} = x;
+    varargout{5} = R;
+elseif nargout == 9
+    varargout{1} = Amp;
+    varargout{2} = y_modeled;
+    varargout{3} = H;
+    varargout{4} = x;
+    varargout{5} = R;
+    varargout{6} = P;
 else
 end
 
 end
+
 end

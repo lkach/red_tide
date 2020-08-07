@@ -10,7 +10,7 @@
 %
 %       X = a*sin(om*t) + b*cos(om*t)
 %
-% This may be useful when rewritten as a phase-shifted sine or cosine:
+% This may be useful when rewritten as a phase-shifted sin or cosine:
 %
 %       X = A*sin(om*t + phaseSIN)
 %       X = A*cos(om*t + phaseCOS)
