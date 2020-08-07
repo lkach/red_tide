@@ -174,7 +174,7 @@ else
 % trend), this value is adjustable only here and not as an option. Note
 % that the output "y_modeled" has the trend added back in so that
 % y_modeled ~= H*x in general.
-detrendBoolean = 0;
+detrendBoolean = 1;
 
 if (iscell(FSR_cell) && isempty(FSR_cell)) || (iscell(FSR_cell) && (length(FSR_cell) == 3))
 else
@@ -353,6 +353,7 @@ elseif exist('R_input','var') && length(R_input) == 2
         error('"R_input" is formatted incorrectly.')
     end
 elseif exist('R_input','var') && isvector(R_input)
+elseif ~exist('R_input','var') && exist('R_cell','var')
 else
     error('"R_input" is formatted incorrectly.')
 end
@@ -478,7 +479,10 @@ if strcmp(Fig,'on')
     plot(t,y_in-nanmean(y_in),'.-k'); hold on
     plot(t_nonan,y_modeled-nanmean(y_in),'.-r')
     plot(t,y_in-y_modeled,'b.-')
-    legend('Data - mean','Fit - mean','Residual'); xlabel('Time'); ylabel('Data'); title(['Data variance = ',num2str(nanvar(y))])
+    legend(['Data, var = ',num2str(nanvar(y_in))],...
+           ['Fit, var = ',num2str(nanvar(y_modeled))],...
+           ['Residual, var = ',num2str(nanvar(y_in-y_modeled))])
+    xlabel('Time'); ylabel('Data'); title('Data minus mean')
     subplot(2,1,2)
     loglog(24*f_periodogram(2:end),2*abs(Periodogram_y(2:end)).^2,'color',[0.5 0.5 0.5]); hold on
     loglog(24*f_spec,spec,'g.-')
