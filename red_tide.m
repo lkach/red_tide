@@ -49,9 +49,12 @@
 %                         tide_f  = cell with all the tidal frequencies to
 %                                   be fit, formatted as characters (e.g.
 %                                   'S2') or numerically (e.g. 1/12) or a
-%                                   mixture, order is unimportant.
+%                                   mixture, order is unimportant. May be
+%                                   empty if all frequencies are also in
+%                                   "fband_centers".
 %                         fband_centers = cell, the centers of frequency
-%                                   bands, may be the same as "tide_f"
+%                                   bands, may be the same as "tide_f" or
+%                                   completely different
 %                         n_sidebands = cell (same size as "fband_centers")
 %                                   with the number of frequencies away
 %                                   from the corresponding center to be fit
@@ -247,62 +250,9 @@ clear Str
 
 %% Tidal Presets
 
-% The ordering of the tides is based on NOAA's harmonic constituent order,
-% e.g. at:
-% <https://tidesandcurrents.noaa.gov/stations.html?type=Harmonic+Constituents>
-% or any other site (though the amplitudes vary geographically, NOAA
-% maintains a 37-element list of constituents in descending order of
-% expected prominence. The order (first column of "NOAA_HARM_CONST") may be
-% modified below, but this is only recommended for special cases, otherwise
-% individual tidal constituents should be specified directly in "tide_f",
-% an argument in "F_cell", which is in turn an argument in "FSR_cell".
-
-NOAA_HARM_CONST = [...
-    1       1/(360/28.9841042)  ;...M2
-    2       1/(360/30)          ;...S2
-    3       1/(360/28.4397295)  ;...N2
-    4       1/(360/15.0410686)  ;...K1
-    5       1/(360/57.9682084)  ;...M4
-    6       1/(360/13.9430356)  ;...O1
-    7       1/(360/86.9523127)  ;...M6
-    8       1/(360/44.0251729)  ;...MK3
-    9       1/(360/60        )  ;...S4
-    10      1/(360/57.4238337)  ;...MN4
-    11      1/(360/28.5125831)  ;...NU2
-    12      1/(360/90        )  ;...S6
-    13      1/(360/27.9682084)  ;...MU2
-    14      1/(360/27.8953548)  ;...2N2
-    15      1/(360/16.1391017)  ;...OO1
-    16      1/(360/29.4556253)  ;...LAM2
-    17      1/(360/15)          ;...S1
-    18      1/(360/14.4920521)  ;...M1
-    19      1/(360/15.5854433)  ;...J1
-    20      1/(360/0.5443747)   ;...MM
-    21      1/(360/0.0821373)   ;...SSA
-    22      1/(360/0.0410686)   ;...SA
-    23      1/(360/1.0158958)   ;...MSF
-    24      1/(360/1.0980331)   ;...MF
-    25      1/(360/13.4715145)  ;...RHO
-    26      1/(360/13.3986609)  ;...Q1
-    27      1/(360/29.9589333)  ;...T2
-    28      1/(360/30.0410667)  ;...R2
-    29      1/(360/12.8542862)  ;...2Q1
-    30      1/(360/14.9589314)  ;...P1
-    31      1/(360/31.0158958)  ;...2SM2
-    32      1/(360/43.4761563)  ;...M3
-    33      1/(360/29.5284789)  ;...L2
-    34      1/(360/42.9271398)  ;...2MK3
-    35      1/(360/30.0821373)  ;...K2
-    36      1/(360/115.9364169) ;...M8
-    37      1/(360/58.9841042) ];%..MS4
-    %   order   1/(period in hr)
-
 if ~exist('F','var') && exist('F_cell','var')
     if length(F_cell) == 1
-        for i=1:F_cell{1}
-            F(i) = NOAA_HARM_CONST(NOAA_HARM_CONST(:,1)==i, 2);
-        end
-        F = sort(F)';
+        F = F_make(F_cell{1});
     else
     end
 else
@@ -472,6 +422,7 @@ if strcmp(Fig,'on')
     y_0padded = y;
     y_0padded(~isfinite(y)) = nanmean(y);
     Periodogram_y = fft(y_0padded)/length(y);
+    Periodogram_r = fft(y_0padded - (y_modeled - y_trend))/length(y);
     f_periodogram = [(0):(1/length(y)):(1 - 1/length(y))]';
     
     figure('Color',[1 1 1])
@@ -485,10 +436,12 @@ if strcmp(Fig,'on')
     xlabel('Time'); ylabel('Data'); title('Data minus mean')
     subplot(2,1,2)
     loglog(24*f_periodogram(2:end),2*abs(Periodogram_y(2:end)).^2,'color',[0.5 0.5 0.5]); hold on
+    loglog(24*f_periodogram(2:end),2*abs(Periodogram_r(2:end)).^2,'color',[0.5 0.5 1])
     loglog(24*f_spec,spec,'g.-')
     loglog(24*f_R,spec_R,'b.-')
-    loglog(24*F,Amp,'r.-')
+    loglog(24*F,Amp,'ro')
     legend(['|FFT(Data)|^2, \Sigma = ',num2str(sum(abs(Periodogram_y(2:end)).^2))],...
+           ['|FFT(Residual)|^2, \Sigma = ',num2str(sum(abs(Periodogram_r(2:end)).^2))],...
            ['Given spectral prior, \Sigma = ',num2str(sum(spec))],...
            ['Residual prior, \Sigma = ',num2str(sum(spec_R))],...
            ['Model coefficients squared, \Sigma = ',num2str(sum(0.5*(Coef(:,1).^2 + Coef(:,2).^2)))])
