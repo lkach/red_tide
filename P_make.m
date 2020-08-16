@@ -29,7 +29,7 @@ function P = P_make(f,S,F,varargin)
 
 if nargin == 3
     SamplePeriod = 1;
-    L = min(diff(F));
+    L = 1/min(diff(F));
 elseif nargin == 5
     SamplePeriod = varargin{1};
     L = varargin{2};

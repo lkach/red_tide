@@ -280,7 +280,7 @@ SamplePeriod = median(diff(t_nonan)); % "mean(diff(T));" may be better.
 % "SamplePeriod" too large.
 Leng = (t_nonan(end) - t_nonan(1)); % In case T(1:...) and/or T(...:end) are nan
 df = 1/Leng;
-f_Ny = 1/SamplePeriod;
+f_Ny = 1/(2*SamplePeriod);
 
 %% Sort out the flexible input for building R
 
@@ -402,8 +402,6 @@ HHPinv = Hw'*Hw + inv(P);
 x = (HHPinv\Hw')*yw;
 HRHPinvinv = inv(HHPinv);
 
-x = x*(length(F)/(length(F) - 1));
-% ^ Observed to be a necessary correction
 Coef = nan(length(F),2);
 Coef(:,1) = x(1:2:end); % sine coefficients
 Coef(:,2) = x(2:2:end); % cosine coefficients
@@ -423,7 +421,7 @@ if strcmp(Fig,'on')
     y_0padded(~isfinite(y)) = nanmean(y);
     Periodogram_y = fft(y_0padded)/length(y);
     Periodogram_r = fft(y_0padded - (y_modeled - y_trend))/length(y);
-    f_periodogram = [(0):(1/length(y)):(1 - 1/length(y))]';
+    f_periodogram = [(0):(1/length(y)):(1 - 1/length(y))]' * length(y)/(t(end) - t(1));
     
     figure('Color',[1 1 1])
     subplot(2,1,1)
