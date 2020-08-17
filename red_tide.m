@@ -77,14 +77,21 @@
 % 
 %               R_cell = {R_input, R_format, Cov_cutoff, Window}
 %               where     R_input = scalar, pair, or vector:
-%                                   if scalar: 0 < R_input < 1 is fraction
+%                                 - if scalar: 0 < R_input < 1 is fraction
 %                                   of variance in residual prior, with
 %                                   white noise assumed
-%                                   if pair: R_input = [slope,frac], where
+%                                 - if pair: R_input = [slope,frac], where
 %                                   slope <= 0 is the spectral slope of the
 %                                   spectral distribution assumed for R
-%                                   if vector: covariance or spectrum
-%                                   corresponding to R
+%                                 - if vector: covariance or spectrum
+%                                   corresponding to R, with these
+%                                   underlying requirements:
+%                                     - if covariance: dt = time series
+%                                       time step in hours, R_input(1) for
+%                                       0'th lag
+%                                     - if spectrum: df = 1/time series
+%                                       length, highest freq = Nyquist
+%                                       frequency in units of 1/hour
 %                         R_format = character, one of 'c' (for
 %                                   [auto]covariance) or 's' (for
 %                                   'spectrum'), which tells which form
@@ -336,9 +343,20 @@ else
 end
 
 if exist('R','var') % "R" is already defined
+    f_R = [(0.5*df):(0.5*df):(f_Ny)]';
+    R_col = R(:,1);
+    R_col = full(R_col);
+    spec_R = ifft([R_col; flip(R_col(2:(end-1)))]);
+    if rms(real(spec_R))/rms(imag(spec_R)) < 10^6
+        disp(['rms real = ',num2str(rms(real(spec_R))),',   rms imag = ',num2str(rms(imag(spec_R)))]);
+    else
+    end
+    spec_R = real(spec_R);
+    spec_R = 2*spec_R(1:length(f_R));
 elseif isempty(R_cell)
     R_white_frac = 0.1; % i.e. fraction of data variance expected to not be modeled at fitted frequencies
     [R,f_R,spec_R] = R_make([R_white_frac*nanvar(y); zeros(10,1)], length(y_nonan), 'c', 5, 'rectwin');
+    f_R = f_R/median(diff(t));
 else
     if exist('Window','var')
     else
@@ -348,6 +366,7 @@ else
     [R,f_R,spec_R] = R_make(R_input, length(t), R_format, Cov_cutoff, Window); % R_format = 'c' or 's'
     % Omit columns corresponding to gaps:
     R = R(isfinite(y),isfinite(y));
+    f_R = f_R/median(diff(t));
 end
 
 if exist('Fig','var') % "Fig" is already defined

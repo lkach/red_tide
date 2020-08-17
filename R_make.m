@@ -7,8 +7,8 @@
 %                is one of 'c', 'cov', 'covariance'.
 %                - If "IN" is a spectrum, it is assumed that IN(end)
 %                corresponds to the Nyquist frequency and IN(1) corresponds
-%                to zero frequency, with spacing = df = 1/T, where
-%                T > Cov_cutoff.
+%                to the fundamental frequency, with spacing = df = 1/T,
+%                both in units of 1/hour, and where T > Cov_cutoff.
 %                - If "IN" is an autocovariance, it is assumed that IN(1)
 %                corresponds to zero lag (i.e. variance), and that each
 %                successive element corresponds to one additional time lag
@@ -32,7 +32,13 @@
 % 
 % OUTPUT:   R = The R-matrix (error covariance) to be used in red_tide
 % 
-%           freq = (OPTIONAL) frequency vector corresponding to S_R below:
+%           freq = (OPTIONAL) frequency vector corresponding to S_R below.
+%                Note that here, df = 1/(2N) [because double the
+%                autocovariance is used to build the spectrum] and
+%                freq(end) = 0.5. That is, the units of "freq" are not
+%                1/hours but rather 1/(dt/hour).
+%                E.g. if dt = 1/3 hours, then multiply "freq" by 3/hour to
+%                put it in units of 1/hour.
 % 
 %           S_R = (OPTIONAL) spectrum of a process with the covariance of
 %                a column of R. This is what red_tide actually "sees" for
@@ -85,7 +91,7 @@ end
 
 if nargout == 1
 elseif nargout == 3
-    freq = [(1/(2*(N-1))):(1/(2*(N-1))):0.5]';%[(1/(N)):(1/(N)):0.5]';
+    freq = [(1/(2*(N-1))):(1/(2*(N-1))):0.5]';
     R_col = R(:,1);
     R_col = full(R_col);
     S_R = ifft([R_col; flip(R_col(2:(end-1)))]);
