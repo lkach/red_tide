@@ -178,6 +178,12 @@ if nargin == 0
     disp('red_tide(t, y, FSR_Cell, ''var1'', val1, etc.)')
 else
 
+if length(t) ~= length(y)
+    error('The time series (second input) and its corresponding time vector (first input) must have the same length.')
+else % make them both columns
+    if isrow(t); t = t'; else; end
+    if isrow(y); y = y'; else; end
+end
 
 % Option to detrend (1 = yes, 0 = no, only de-mean). Because detrending
 % will usually be advantageous (removing broadband contamination by a
