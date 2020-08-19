@@ -72,9 +72,8 @@
 %               S_cell = {f_spec, spec}
 %               where     f_spec  = frequency vector corresponding to "spec"
 %                         spec    = spectrum to be used as the model prior,
-%                                   where sum(spec) = variance is enforced
-%                                   (i.e. units of variance, not spectral
-%                                   power).
+%                                   where sum(spec) = variance, not
+%                                   spectral power.
 % 
 %               R_cell = {R_input, R_format, Cov_cutoff, Window}
 %               where     R_input = scalar, pair, or vector:
@@ -335,12 +334,11 @@ end
 
 if exist('P','var') % "P" is already defined
 elseif isempty(S_cell)
-    % P = P_make([df,f_Ny]',nanvar(y)*[0.5 0.5]',F,SamplePeriod,Leng);
     f_spec = [df:df:f_Ny]'; spec = nanvar(y)*ones(size(f_spec))/length(f_spec);
     P = P_make(f_spec,spec,F,SamplePeriod,Leng);
     % i.e. same model covariance at all frequencies
 else
-    spec = spec*nanvar(y)/sum(spec);
+    % spec = spec*nanvar(y)/sum(spec);
     P = P_make(f_spec,spec,F,SamplePeriod,Leng);
     % i.e. model covariance is interpolated from the given spectrum "spec"
 end
