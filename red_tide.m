@@ -345,7 +345,7 @@ end
 
 if exist('H','var') % "H" is already defined
 else
-    H = H_make(t_nonan,F);
+    H = H_make(t,F);
 end
 
 if exist('R','var') % "R" is already defined
@@ -451,7 +451,7 @@ if strcmp(Fig,'on')
     figure('Color',[1 1 1])
     subplot(2,1,1)
     plot(t,y_in-nanmean(y_in),'.-k'); hold on
-    plot(t_nonan,y_modeled-nanmean(y_in),'.-r')
+    plot(t,y_modeled-nanmean(y_in),'.-r')
     plot(t,y_in-y_modeled,'b.-')
     legend(['Data, var = ',num2str(nanvar(y_in))],...
            ['Fit, var = ',num2str(nanvar(y_modeled))],...
