@@ -100,7 +100,7 @@ elseif nargout == 3
     else
     end
     S_R = real(S_R);
-    S_R = 2*S_R(1:length(freq));
+    S_R = 2*S_R(2:(length(freq)+1));
     
     varargout{1} = freq;
     varargout{2} = S_R;
