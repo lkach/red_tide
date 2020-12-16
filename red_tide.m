@@ -210,6 +210,9 @@ if isempty(FSR_cell)
     F_cell = {37};
     S_cell = {};
     R_cell = {};
+    warning(['Default settings used (37 default tidal constituents, ',...
+        'spectrally white model coefficient and noise priors). ',...
+        'These may not provide a useful fit to the data.'])
 else % i.e. FSR_cell = {{...},{...},{...}}
     F_cell = FSR_cell{1};
     S_cell = FSR_cell{2};
