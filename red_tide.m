@@ -115,6 +115,11 @@
 % about the input and output, including: data (time series), model time
 % series, data periodogram, model prior spectrum, residual prior spectrum,
 % and model amplitude.
+% The option 'InvMethod' (inversion method) may be set to either 'default'
+% (default) or 'Cholesky'. The former solves R\H, while the latter defines
+% L=ichol(R) and solves L\H. The default option seems faster in all cases,
+% but the option to use Cholesky factorization remains in case it is ever
+% deemed relevant or necessary.
 % 
 % 
 % % % % % % % % % % % % % % % % % OUTPUTS % % % % % % % % % % % % % % % % %
@@ -202,6 +207,9 @@ end
 % Assign variables from the contents of these cells:
 if isempty(FSR_cell)
     % Rely on varargin to build F, H, P, and R
+    F_cell = {37};
+    S_cell = {};
+    R_cell = {};
 else % i.e. FSR_cell = {{...},{...},{...}}
     F_cell = FSR_cell{1};
     S_cell = FSR_cell{2};
@@ -237,7 +245,7 @@ if ~isempty(varargin)
     Str = struct(varargin{:});
     Names = fieldnames(Str);
     % Verify that variables are only the ones that are allowed:
-    AllowedVars = {'F','H','P','R','Fig'}';
+    AllowedVars = {'F','H','P','R','Fig','InvMethod'}';
     for i=1:length(Names)
         if ismember(Names{i},AllowedVars)
         else
@@ -382,50 +390,65 @@ end
 
 %% Least Squares Problem
 
+if ~exist('InvMethod','var')
+    InvMethod = 'default';
+else
+end
+
+if strcmp(InvMethod,'default')
+    iRH = R(isfinite(y),isfinite(y))\H(isfinite(y),:);
+    HRHPinv = H'*iRH + inv(P);
+    x = (HRHPinv\H(isfinite(y),:)')*(R(isfinite(y),isfinite(y))\y(isfinite(y)));
+    HRHPinvinv = inv(HRHPinv);
+elseif strcmp(InvMethod,'Cholesky')
 % This chain of try-catch's serves to whiten R by adding to the diagonal
 % (zero-lag) of R when doing the Cholesky factorization until no more error
 % is given by ichol (ichol only works for positive definite matrices, and
 % the particular structure of R can make this condition difficult to
 % achieve, especially for a noise spectrum with spectral slope <= -2).
-% 
+%
 % To avoid unnecessary computation when running many time series through
 % red_tide but reusing the same "R", make sure that "R" is positive
 % definite.
-OPTS.diagcomp = 0;
-try L = ichol(R,OPTS); catch;
-    warning(['"R" is not positive definite. If this calculation is to',...
-    ' be repeated many times for the same "R", consider first',...
-    ' verifying that "R" is positive definite to avoid unnecessary',...
-    ' computation. Whiten "R" by increasing the diagonal with the',...
-    ' option "diagcomp" (see MATLAB''s ichol for more info).'])
-    OPTS.diagcomp = 0.01;
-    disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
+    OPTS.diagcomp = 0;
     try L = ichol(R,OPTS); catch;
-        OPTS.diagcomp = 0.1;
+        warning(['"R" is not positive definite. If this calculation is to',...
+            ' be repeated many times for the same "R", consider first',...
+            ' verifying that "R" is positive definite to avoid unnecessary',...
+            ' computation. Whiten "R" by increasing the diagonal with the',...
+            ' option "diagcomp" (see MATLAB''s ichol for more info).'])
+        OPTS.diagcomp = 0.01;
         disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
         try L = ichol(R,OPTS); catch;
-            OPTS.diagcomp = 1;
+            OPTS.diagcomp = 0.1;
             disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
             try L = ichol(R,OPTS); catch;
-                OPTS.diagcomp = 10;
+                OPTS.diagcomp = 1;
                 disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
                 try L = ichol(R,OPTS); catch;
-                    OPTS.diagcomp = 20;
+                    OPTS.diagcomp = 10;
                     disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
                     try L = ichol(R,OPTS); catch;
-                        error('ichol option "diagcomp" was not enough to get L from R.')
+                        OPTS.diagcomp = 20;
+                        disp(['"diagcomp" = ',num2str(OPTS.diagcomp)])
+                        try L = ichol(R,OPTS); catch;
+                            error('ichol option "diagcomp" was not enough to get L from R.')
+                        end
                     end
                 end
             end
         end
     end
+    
+    yw = L\y(isfinite(y));
+    Hw = L\H(isfinite(y),:);
+    HHPinv = Hw'*Hw + inv(P);
+    x = (HHPinv\Hw')*yw;
+    HRHPinvinv = inv(HHPinv);
+    
+else
+    error('Variable "InvMethod" is formatted incorrectly, must be either ''default'' or ''Cholesky''.')
 end
-
-yw = L\y(isfinite(y));
-Hw = L\H(isfinite(y),:);
-HHPinv = Hw'*Hw + inv(P);
-x = (HHPinv\Hw')*yw;
-HRHPinvinv = inv(HHPinv);
 
 Coef = nan(length(F),2);
 Coef(:,1) = x(1:2:end); % sine coefficients
