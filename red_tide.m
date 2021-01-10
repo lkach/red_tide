@@ -400,7 +400,7 @@ end
 
 if strcmp(InvMethod,'default')
     iRH = R(isfinite(y),isfinite(y))\H(isfinite(y),:);
-    HRHPinv = H'*iRH + inv(P);
+    HRHPinv = H(isfinite(y),:)'*iRH + inv(P);
     x = (HRHPinv\H(isfinite(y),:)')*(R(isfinite(y),isfinite(y))\y(isfinite(y)));
     HRHPinvinv = inv(HRHPinv);
 elseif strcmp(InvMethod,'Cholesky')
