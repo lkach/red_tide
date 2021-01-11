@@ -23,7 +23,9 @@
 %               inverse units of f and F. E.g. sampling once per 2 hours
 %               corresponds to SamplePeriod = 2
 % 
-%           L = time series length (also in inverse units of f and F)
+%           L = time series length (also in inverse units of f and F). This
+%               is especially important to give explicitly when "F" does
+%               not have a frequency step the same size as 1/record length.
 
 function P = P_make(f,S,F,varargin)
 
@@ -42,7 +44,7 @@ df = 1/L;
 
 F_ = F;
 if F_(1) > df; F_ = [df;F_]; else; end
-if F_(end) < f_Ny; F_ = [F_;0.5]; else; end
+if F_(end) < f_Ny; F_ = [F_;f_Ny]; else; end
 diff_F = diff(F_);
 F_unmodeled = []; % will necessarily change size in the loop
 for i=1:length(diff_F)

@@ -195,7 +195,7 @@ end
 % trend), this value is adjustable only here and not as an option. Note
 % that the output "y_modeled" has the trend added back in so that
 % y_modeled ~= H*x in general.
-detrendBoolean = 1;
+detrendBoolean = 0;
 
 if (iscell(FSR_cell) && isempty(FSR_cell)) || (iscell(FSR_cell) && (length(FSR_cell) == 3))
 else
@@ -400,7 +400,7 @@ end
 
 if strcmp(InvMethod,'default')
     iRH = R(isfinite(y),isfinite(y))\H(isfinite(y),:);
-    HRHPinv = H'*iRH + inv(P);
+    HRHPinv = H(isfinite(y),:)'*iRH + inv(P);
     x = (HRHPinv\H(isfinite(y),:)')*(R(isfinite(y),isfinite(y))\y(isfinite(y)));
     HRHPinvinv = inv(HRHPinv);
 elseif strcmp(InvMethod,'Cholesky')
