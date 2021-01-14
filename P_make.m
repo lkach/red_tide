@@ -26,17 +26,34 @@
 %           L = time series length (also in inverse units of f and F). This
 %               is especially important to give explicitly when "F" does
 %               not have a frequency step the same size as 1/record length.
+% 
+%           INTERP_METHOD = string, may be any of the interpolation methods
+%               available to "interp1", e.g. 'linear' or 'spline'. The
+%               default option is 'loglinear', which is not an option for
+%               "interp1" but rather an option that tells interp1 to
+%               linearly interpolate the log of "S", and then run it
+%               through exp(). This reduces the effect of a single sharp
+%               peak in "S" giving too much energy a priori to neighboring
+%               frequencies. It also prevents the already smeared spectrum
+%               from being even more biased in favor of overestimating
+%               amplitudes near what are actually sharp peaks.
 
 function P = P_make(f,S,F,varargin)
 
 if nargin == 3
     SamplePeriod = 1;
     L = 1/min(diff(F));
+    INTERP_METHOD = 'loglinear';
 elseif nargin == 5
     SamplePeriod = varargin{1};
     L = varargin{2};
+    INTERP_METHOD = 'loglinear';
+elseif nargin == 6
+    SamplePeriod = varargin{1};
+    L = varargin{2};
+    INTERP_METHOD = varargin{3};
 else
-    error(['3 or 5 inputs expected, given ',num2str(nargin),'. See documentation.'])
+    error(['3 or 5 or 6 inputs expected, given ',num2str(nargin),'. See documentation.'])
 end
 
 f_Ny = 1/(2*SamplePeriod);
@@ -62,8 +79,12 @@ F_full = [F; F_unmodeled'];
 F_full = unique(F_full);
 
 
-
-Sxx_Prior = interp1([f;(f_Ny+df)],[S;S(end)],F_full,'linear');
+if strcmp(INTERP_METHOD,'loglinear')
+    Sxx_Prior = exp(interp1([f;(f_Ny+df)],log([S;S(end)]),F_full,'linear'));
+else
+    Sxx_Prior = interp1([f;(f_Ny+df)],[S;S(end)],F_full,INTERP_METHOD);
+end
+Sxx_Prior(Sxx_Prior<=0) = min(Sxx_Prior(Sxx_Prior>0));
 
 % ^ Still not done: there will be NaN's in the frequencies of F outside of
 % the min and max of f_vec. Make it the same as the lowest-frequency value

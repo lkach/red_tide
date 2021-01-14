@@ -120,6 +120,11 @@
 % L=ichol(R) and solves L\H. The default option seems faster in all cases,
 % but the option to use Cholesky factorization remains in case it is ever
 % deemed relevant or necessary.
+% The option 'InterpMethod' (interpolation method) dictates the method used
+% to interpolate the model prior spectrum to the modeled frequencies
+% (default 'loglinear', see "P_make" documentation). This has to do with
+% constructing "P" from information in "S_cell", and has nothing to do with
+% interpolating the data.
 % 
 % 
 % % % % % % % % % % % % % % % % % OUTPUTS % % % % % % % % % % % % % % % % %
@@ -195,7 +200,7 @@ end
 % trend), this value is adjustable only here and not as an option. Note
 % that the output "y_modeled" has the trend added back in so that
 % y_modeled ~= H*x in general.
-detrendBoolean = 0;
+detrendBoolean = 1;
 
 if (iscell(FSR_cell) && isempty(FSR_cell)) || (iscell(FSR_cell) && (length(FSR_cell) == 3))
 else
@@ -248,7 +253,7 @@ if ~isempty(varargin)
     Str = struct(varargin{:});
     Names = fieldnames(Str);
     % Verify that variables are only the ones that are allowed:
-    AllowedVars = {'F','H','P','R','Fig','InvMethod'}';
+    AllowedVars = {'F','H','P','R','Fig','InvMethod','InterpMethod'}';
     for i=1:length(Names)
         if ismember(Names{i},AllowedVars)
         else
@@ -343,14 +348,19 @@ else
     F = F_make(df, n_lowNO, df_NO, n_lowO, tide_f, fband_centers, n_sidebands, df_sidebands, inertial);
 end
 
+if exist('InterpMethod','var')
+else
+    InterpMethod = 'loglinear';
+end
+
 if exist('P','var') % "P" is already defined
 elseif isempty(S_cell)
     f_spec = [df:df:f_Ny]'; spec = nanvar(y)*ones(size(f_spec))/length(f_spec);
-    P = P_make(f_spec,spec,F,SamplePeriod,Leng);
+    P = P_make(f_spec,spec,F,SamplePeriod,Leng,InterpMethod);
     % i.e. same model covariance at all frequencies
 else
     % spec = spec*nanvar(y)/sum(spec);
-    P = P_make(f_spec,spec,F,SamplePeriod,Leng);
+    P = P_make(f_spec,spec,F,SamplePeriod,Leng,InterpMethod);
     % i.e. model covariance is interpolated from the given spectrum "spec"
 end
 
