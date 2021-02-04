@@ -139,9 +139,9 @@
 % 
 % Coef_Unc      Mx2 matrix of the uncertainty of the model coefficients.
 %               Formally, this is the sine/cosine sorted version of
-%               "model spread about mean" <(x - ~x)(x - ~x)'>, but only the
-%               diagonal elements (off-diagonal covariance is assumed to be
-%               negligible).
+%               "model spread about mean" sqrt(<(x - ~x)(x - ~x)'>), but
+%               only the diagonal elements (off-diagonal covariance is
+%               assumed to be negligible).
 % 
 % Amp           (Optional) Mx1 vector of tidal amplitudes =
 %               0.5*(Coef(:,1).^2 + Coef(:,2).^2)
