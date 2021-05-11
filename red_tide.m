@@ -411,7 +411,7 @@ end
 if strcmp(InvMethod,'default')
     iRH = R\H(isfinite(y),:);
     HRHPinv = H(isfinite(y),:)'*iRH + inv(P);
-    x = (HRHPinv\H(isfinite(y),:)')*(R(isfinite(y),isfinite(y))\y(isfinite(y)));
+    x = (HRHPinv\H(isfinite(y),:)')*(R\y(isfinite(y)));
     HRHPinvinv = inv(HRHPinv);
 elseif strcmp(InvMethod,'Cholesky')
 % This chain of try-catch's serves to whiten R by adding to the diagonal
