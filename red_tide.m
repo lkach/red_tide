@@ -409,7 +409,7 @@ else
 end
 
 if strcmp(InvMethod,'default')
-    iRH = R(isfinite(y),isfinite(y))\H(isfinite(y),:);
+    iRH = R\H(isfinite(y),:);
     HRHPinv = H(isfinite(y),:)'*iRH + inv(P);
     x = (HRHPinv\H(isfinite(y),:)')*(R(isfinite(y),isfinite(y))\y(isfinite(y)));
     HRHPinvinv = inv(HRHPinv);
