@@ -1,0 +1,31 @@
+% The relation of various derived quantities (e.g. tidal orbital parameters)
+% to the sine and cosine coefficients of u and v. "w" is used for omega for
+% notational convenience.
+%
+%                           --- CARTESIAN ---
+% 
+%         u = Acos(w t) + Bsin(w t) = alpha sin(w t + phi_u)
+%         v = Ccos(w t) + Dsin(w t) = beta  sin(w t + phi_v)
+% 
+%         var(u) = 0.5*(A^2 + B^2)
+%         var(v) = 0.5*(C^2 + D^2)
+% 
+%         phi_u = atan2(A,B)
+%         phi_v = atan2(C,D)
+% 
+%                            --- ROTARY ---
+% 
+%         W = u + iv
+%           = Rccw exp(i w t) + Rcw exp(-i w t)
+% 
+%         Rccw = 0.5*(A + D + 1i*(C - B))
+%         Rcw  = 0.5*(A - D + 1i*(C + B))
+%             A_ccw = abs(Rccw)
+%             A_cw  = abs(Rcw)
+% 
+%         Orientation:    theta = 0.5*(atan2(C-B,A+D) + atan2(C+B,A-D))
+%         rotary phase: phi_rot = 0.5*(atan2(C-B,A+D) - atan2(C+B,A-D))
+% 
+%         semi-major axis:  SM_axis = abs(Rccw) + abs(Rcw)
+%         semi-minor axis:  sm_axis = abs( abs(Rccw) - abs(Rcw) )
+%         Eccentricity:     Ecc = sqrt(1 - (sm_axis./SM_axis).^2)
