@@ -107,7 +107,7 @@ Sxx_Prior(isnan(Sxx_Prior)) = S(1);
 
 diffF_full = diff(F_full); % Probably better
     diffF_full = [diffF_full(1); diffF_full];
-Sxx_Prior = Sxx_Prior.*(diffF_full./mean(diff(f)));
+Sxx_Prior = Sxx_Prior.*(diffF_full./median(diff(f)));
 
 % % Define the Prior covariance matrix
 % We are assuming an extreme form of localization (otherwise a non-diagonal
