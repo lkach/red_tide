@@ -389,9 +389,10 @@ if exist('P','var') % "P" is already defined
 elseif isempty(S_cell)
     f_spec = [df:df:f_Ny]'; spec = nanvar(y)*ones(size(f_spec))/length(f_spec);
     spec_r_interp = (f_spec(1)/f_R(1))*interp1([0;f_R],[spec_R(1);spec_R],f_spec);
+        spec_r_interp(~isfinite(spec_r_interp)) = min(spec_r_interp(isfinite(spec_r_interp)));
     % ^ The constant before interpolating is done to conserve spectral
     % power (variance).
-    spec_P_adjust = spec - spec_r_interp;
+    spec_P_adjust = spec - 0*spec_r_interp;
     % ^ This is done to eliminate double counting of variance as signal and
     % noise.
     spec_P_adjust(spec_P_adjust<0.05*spec) = 0.05*spec(spec_P_adjust<0.05*spec);
@@ -412,9 +413,10 @@ elseif isempty(S_cell)
 else
     % spec = spec*nanvar(y)/sum(spec);
     spec_r_interp = (f_spec(1)/f_R(1))*interp1([0;f_R],[spec_R(1);spec_R],f_spec);
+        spec_r_interp(~isfinite(spec_r_interp)) = min(spec_r_interp(isfinite(spec_r_interp)));
     % ^ The constant before interpolating is done to conserve spectral
     % power (variance).
-    spec_P_adjust = spec - spec_r_interp;
+    spec_P_adjust = spec - 0*spec_r_interp;
     % ^ This is done to eliminate double counting of variance as signal and
     % noise.
     spec_P_adjust(spec_P_adjust<0.05*spec) = 0.05*spec(spec_P_adjust<0.05*spec);
