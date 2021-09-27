@@ -91,8 +91,8 @@ end
 
 if nargout == 1
 elseif nargout == 3
-    freq = [(1/(2*(N-1))):(1/(2*(N-1))):0.5]';
-    R_col = R(:,1);
+    freq = [(1/((N-1))):(1/((N-1))):0.5]';
+    R_col = R(1:round(N),1);
     R_col = full(R_col);
     S_R = ifft([R_col; flip(R_col(2:(end-1)))]);
     if rms(real(S_R))/rms(imag(S_R)) < 10^6

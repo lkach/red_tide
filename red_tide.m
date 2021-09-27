@@ -139,9 +139,9 @@
 % 
 % Coef_Unc      Mx2 matrix of the uncertainty of the model coefficients.
 %               Formally, this is the sine/cosine sorted version of
-%               "model spread about mean" <(x - ~x)(x - ~x)'>, but only the
-%               diagonal elements (off-diagonal covariance is assumed to be
-%               negligible).
+%               "model spread about mean" sqrt(<(x - ~x)(x - ~x)'>), but
+%               only the diagonal elements (off-diagonal covariance is
+%               assumed to be negligible).
 % 
 % Amp           (Optional) Mx1 vector of tidal amplitudes =
 %               0.5*(Coef(:,1).^2 + Coef(:,2).^2)
@@ -200,7 +200,7 @@ end
 % trend), this value is adjustable only here and not as an option. Note
 % that the output "y_modeled" has the trend added back in so that
 % y_modeled ~= H*x in general.
-detrendBoolean = 1;
+detrendBoolean = 0;
 
 if (iscell(FSR_cell) && isempty(FSR_cell)) || (iscell(FSR_cell) && (length(FSR_cell) == 3))
 else
@@ -353,17 +353,6 @@ else
     InterpMethod = 'loglinear';
 end
 
-if exist('P','var') % "P" is already defined
-elseif isempty(S_cell)
-    f_spec = [df:df:f_Ny]'; spec = nanvar(y)*ones(size(f_spec))/length(f_spec);
-    P = P_make(f_spec,spec,F,SamplePeriod,Leng,InterpMethod);
-    % i.e. same model covariance at all frequencies
-else
-    % spec = spec*nanvar(y)/sum(spec);
-    P = P_make(f_spec,spec,F,SamplePeriod,Leng,InterpMethod);
-    % i.e. model covariance is interpolated from the given spectrum "spec"
-end
-
 if exist('H','var') % "H" is already defined
 else
     H = H_make(t,F);
@@ -382,7 +371,7 @@ if exist('R','var') % "R" is already defined
     spec_R = 2*spec_R(1:length(f_R));
 elseif isempty(R_cell)
     R_white_frac = 0.1; % i.e. fraction of data variance expected to not be modeled at fitted frequencies
-    [R,f_R,spec_R] = R_make([R_white_frac*nanvar(y); zeros(10,1)], length(y_nonan), 'c', 5, 'rectwin');
+    [R,f_R,spec_R] = R_make([R_white_frac*nanvar(y); zeros(10,1)], length(t), 'c', 5, 'rectwin');
     f_R = f_R/median(diff(t));
 else
     if exist('Window','var')
@@ -392,8 +381,59 @@ else
     % ^ "Window" is not a required input like all the others
     [R,f_R,spec_R] = R_make(R_input, length(t), R_format, Cov_cutoff, Window); % R_format = 'c' or 's'
     % Omit columns corresponding to gaps:
-    R = R(isfinite(y),isfinite(y));
+    % R = R(isfinite(y),isfinite(y));
     f_R = f_R/median(diff(t));
+end
+
+if exist('P','var') % "P" is already defined
+elseif isempty(S_cell)
+    f_spec = [df:df:f_Ny]'; spec = nanvar(y)*ones(size(f_spec))/length(f_spec);
+    spec_r_interp = (f_spec(1)/f_R(1))*interp1([0;f_R],[spec_R(1);spec_R],f_spec);
+        spec_r_interp(~isfinite(spec_r_interp)) = min(spec_r_interp(isfinite(spec_r_interp)));
+    % ^ The constant before interpolating is done to conserve spectral
+    % power (variance).
+    spec_P_adjust = spec - 0*spec_r_interp;
+    % ^ This is done to eliminate double counting of variance as signal and
+    % noise.
+    spec_P_adjust(spec_P_adjust<0.05*spec) = 0.05*spec(spec_P_adjust<0.05*spec);
+    % ^ This reintroduced a small amount of double counting in order to
+    % prevent a negative P while keeping the lowest the model prior can go
+    % to be some percentage (here 5%) of the given spectral prior. This
+    % only happens at frequencies at which R is greater in power than P.
+    P = P_make(f_spec,spec_P_adjust,F,SamplePeriod,Leng,InterpMethod);
+    % i.e. same model covariance at all frequencies
+    
+    % % Plot for troubleshooting:
+    % figure;loglog(f_spec,spec,'k.-'); hold on
+    %        loglog(f_R,spec_R,'b.-')
+    %        loglog(f_spec,spec_r_interp,'g.-')
+    %        loglog(f_spec,spec_P_adjust,'c.-')
+    %        loglog(F,diag(P(1:2:end,1:2:end)),'r.-')
+    %        legend('input spectrum','S_r_r','S_r_r interpolated','input spectrum adjusted','diagonals of P')
+else
+    % spec = spec*nanvar(y)/sum(spec);
+    spec_r_interp = (f_spec(1)/f_R(1))*interp1([0;f_R],[spec_R(1);spec_R],f_spec);
+        spec_r_interp(~isfinite(spec_r_interp)) = min(spec_r_interp(isfinite(spec_r_interp)));
+    % ^ The constant before interpolating is done to conserve spectral
+    % power (variance).
+    spec_P_adjust = spec - 0*spec_r_interp;
+    % ^ This is done to eliminate double counting of variance as signal and
+    % noise.
+    spec_P_adjust(spec_P_adjust<0.05*spec) = 0.05*spec(spec_P_adjust<0.05*spec);
+    % ^ This reintroduced a small amount of double counting in order to
+    % prevent a negative P while keeping the lowest the model prior can go
+    % to be some percentage (here 5%) of the given spectral prior. This
+    % only happens at frequencies at which R is greater in power than P.
+    P = P_make(f_spec,spec_P_adjust,F,SamplePeriod,Leng,InterpMethod);
+    % i.e. model covariance is interpolated from the given spectrum "spec"
+    
+    % % Plot for troubleshooting:
+    % figure;loglog(f_spec,spec,'k.-'); hold on
+    %        loglog(f_R,spec_R,'b.-')
+    %        loglog(f_spec,spec_r_interp,'g.-')
+    %        loglog(f_spec,spec_P_adjust,'c.-')
+    %        loglog(F,diag(P(1:2:end,1:2:end)),'r.-')
+    %        legend('input spectrum','S_r_r','S_r_r interpolated','input spectrum adjusted','diagonals of P')
 end
 
 if exist('Fig','var') % "Fig" is already defined
