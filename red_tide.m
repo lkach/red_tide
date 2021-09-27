@@ -392,7 +392,7 @@ elseif isempty(S_cell)
         spec_r_interp(~isfinite(spec_r_interp)) = min(spec_r_interp(isfinite(spec_r_interp)));
     % ^ The constant before interpolating is done to conserve spectral
     % power (variance).
-    spec_P_adjust = spec - 0*spec_r_interp;
+    spec_P_adjust = spec - spec_r_interp;
     % ^ This is done to eliminate double counting of variance as signal and
     % noise.
     spec_P_adjust(spec_P_adjust<0.05*spec) = 0.05*spec(spec_P_adjust<0.05*spec);
@@ -416,7 +416,7 @@ else
         spec_r_interp(~isfinite(spec_r_interp)) = min(spec_r_interp(isfinite(spec_r_interp)));
     % ^ The constant before interpolating is done to conserve spectral
     % power (variance).
-    spec_P_adjust = spec - 0*spec_r_interp;
+    spec_P_adjust = spec - spec_r_interp;
     % ^ This is done to eliminate double counting of variance as signal and
     % noise.
     spec_P_adjust(spec_P_adjust<0.05*spec) = 0.05*spec(spec_P_adjust<0.05*spec);
