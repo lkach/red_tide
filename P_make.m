@@ -8,11 +8,11 @@
 % 
 % INPUT:    f = (vector) the frequency basis corresponding with S
 % 
-%           S = (vector) the spectrum to be used as a prior for model
+%           S = (vector) the spectrum used to build the assumed model
 %               coefficient covariance in red_tide. This should NOT be in
 %               units of spectral power density, but rather variance, i.e.
 %               sum(S) = var(time series), or possibly ~= if you want to
-%               use a prior spectral distribution different from that of
+%               use a spectral distribution different from that of
 %               the time series.
 % 
 %           F = (vector) the frequencies at which red_tide is to model
