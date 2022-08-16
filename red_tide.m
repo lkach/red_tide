@@ -9,8 +9,8 @@
 % the residual time series.
 % 
 % The equation to be solved is:         y = H*x + r
-% Prior model autocovariance is:        P = <xx'>
-% Prior residual autocovariance is:     R = <rr'>
+% Model autocovariance is:              P = <xx'>
+% Residual autocovariance is:           R = <rr'>
 % "x" is estimated by "~x":            ~x = (H' R^-1 H + P^-1)^-1 H' R^-1 y
 % 
 % N = number of data, M = number of frequencies
@@ -71,14 +71,14 @@
 % 
 %               S_cell = {f_spec, spec}
 %               where     f_spec  = frequency vector corresponding to "spec"
-%                         spec    = spectrum to be used as the model prior,
+%                         spec    = spectrum to be used as the model autocov.,
 %                                   where sum(spec) = variance, not
 %                                   spectral power.
 % 
 %               R_cell = {R_input, R_format, Cov_cutoff, Window}
 %               where     R_input = scalar, pair, or vector:
 %                                 - if scalar: 0 < R_input < 1 is fraction
-%                                   of variance in residual prior, with
+%                                   of variance in residual autocov., with
 %                                   white noise assumed
 %                                 - if pair: R_input = [slope,frac], where
 %                                   slope <= 0 is the spectral slope of the
@@ -113,7 +113,7 @@
 % Additionally, the option 'Fig' may be set to 'on' in order to produce
 % a cursory figure that includes time- and frequency-domain information
 % about the input and output, including: data (time series), model time
-% series, data periodogram, model prior spectrum, residual prior spectrum,
+% series, data periodogram, assumed model spectrum, assumed residual spectrum,
 % and model amplitude.
 % The option 'InvMethod' (inversion method) may be set to either 'default'
 % (default) or 'Cholesky'. The former solves R\H, while the latter defines
@@ -157,10 +157,10 @@
 % x             (Optional) 2Mx1 model coefficients in a form that can
 %               multiply by "H" to give "y_modeled"
 % 
-% R             (Optional) NxN prior error (residual) covariance matrix
+% R             (Optional) NxN error (residual) covariance matrix
 %               (time domain)
 % 
-% P             (Optional) 2Mx2M prior model covariance matrix (frequency
+% P             (Optional) 2Mx2M model covariance matrix (frequency
 %               domain)
 % 
 % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
@@ -392,7 +392,7 @@ elseif isempty(S_cell)
         spec_r_interp(~isfinite(spec_r_interp)) = min(spec_r_interp(isfinite(spec_r_interp)));
     % ^ The constant before interpolating is done to conserve spectral
     % power (variance).
-    spec_P_adjust = spec - 0*spec_r_interp;
+    spec_P_adjust = spec - spec_r_interp;
     % ^ This is done to eliminate double counting of variance as signal and
     % noise.
     spec_P_adjust(spec_P_adjust<0.05*spec) = 0.05*spec(spec_P_adjust<0.05*spec);
@@ -416,7 +416,7 @@ else
         spec_r_interp(~isfinite(spec_r_interp)) = min(spec_r_interp(isfinite(spec_r_interp)));
     % ^ The constant before interpolating is done to conserve spectral
     % power (variance).
-    spec_P_adjust = spec - 0*spec_r_interp;
+    spec_P_adjust = spec - spec_r_interp;
     % ^ This is done to eliminate double counting of variance as signal and
     % noise.
     spec_P_adjust(spec_P_adjust<0.05*spec) = 0.05*spec(spec_P_adjust<0.05*spec);
@@ -541,8 +541,8 @@ if strcmp(Fig,'on')
     loglog(24*F,Amp,'ro')
     legend(['|FFT(Data)|^2, \Sigma = ',num2str(sum(abs(Periodogram_y(2:end)).^2))],...
            ['|FFT(Residual)|^2, \Sigma = ',num2str(sum(abs(Periodogram_r(2:end)).^2))],...
-           ['Given spectral prior, \Sigma = ',num2str(sum(spec))],...
-           ['Residual prior, \Sigma = ',num2str(sum(spec_R))],...
+           ['Given spectrum, \Sigma = ',num2str(sum(spec))],...
+           ['Assumed residual spectrum, \Sigma = ',num2str(sum(spec_R))],...
            ['Model coefficients squared, \Sigma = ',num2str(sum(0.5*(Coef(:,1).^2 + Coef(:,2).^2)))])
     xlabel('Frequency (cpd)'); ylabel('Variance')
     set(gcf,'Position',[440   127   560   671])
