@@ -1,4 +1,4 @@
-% [R, freq, S_R] = R_make(IN, N, Format, Cov_cutoff, Window)
+% [freq, S_R] = Spectrum_from_R(R)
 % 
 % Accessory function to red_tide. This builds the spectrum corresponding to
 % the R matrix (which is in the time domain). This functionality exists in
