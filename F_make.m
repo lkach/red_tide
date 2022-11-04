@@ -106,8 +106,7 @@ if nargin == 9
         F_tidal = [F_tidal, F_user_defined_tide];
         F_tidal = unique(F_tidal);
         F_cuspcenters = Full_Tide_Vec(logical(F_cusp_boolean));
-        F_cuspcenters = [F_cuspcenters, F_user_defined_center];
-        F_cuspcenters = unique(F_cuspcenters);
+        F_cuspcenters = [F_cuspcenters, unique(F_user_defined_center)];
     else
         F_tidal = [];
         F_cuspcenters = [];
